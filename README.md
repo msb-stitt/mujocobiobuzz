@@ -30,4 +30,10 @@ its hives turn on their pivots between two stable states. The robot's mecanum wh
 free rollers, and a motor drives each wheel and mechanism, named as biobuzz's code names it, its
 control the power, −1 to 1, as that code sets it. `uv run pytest -m slow` checks the built models.
 
+## Driving the model from biobuzz's simulator
+
+`mujocobiobuzz.nt.run` steps the robot's scene in real time as a NetworkTables 4 client of
+biobuzz's `simRun`, as AdvantageScope is one, setting each motor to the power biobuzz's code set.
+`mujocobiobuzz.nt` names the topics it reads.
+
 Licensed under Apache-2.0; see `LICENSE`.
