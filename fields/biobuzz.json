@@ -69,6 +69,8 @@
    "parts": [
     "am-5853-Blue Hive <1>"
    ],
+   "density_g_cm3": 0.594,
+   "density_note": "0.22 of 2.7 g/cm3, fitted so a raised cell's 8th POLLEN tips the hive and its 7th does not, as tests/test_field.py checks",
    "joint": {
     "through": "Goal Pivot Assembly <1>",
     "axis_cad": [
@@ -95,6 +97,8 @@
    "parts": [
     "am-5853-Red Hive <1>"
    ],
+   "density_g_cm3": 0.594,
+   "density_note": "0.22 of 2.7 g/cm3, fitted so a raised cell's 8th POLLEN tips the hive and its 7th does not, as tests/test_field.py checks",
    "joint": {
     "through": "Goal Pivot Assembly <1>",
     "axis_cad": [

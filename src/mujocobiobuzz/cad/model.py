@@ -416,7 +416,9 @@ def write_model(
     summary: dict[str, Any] = {"name": spec["name"], "bodies": {}}
     for b in bodies:
         _write_hulls(b, spec, frame, out, reduce)
-        masses[b.name] = mass_and_inertia(b.solids, spec["density_g_cm3"], frame)
+        own: dict[str, Any] = next((x for x in spec["bodies"] if x["name"] == b.name), {})
+        density = own.get("density_g_cm3", spec["density_g_cm3"])
+        masses[b.name] = mass_and_inertia(b.solids, density, frame)
         shown = [s for s in b.solids if top_part(s) not in look_drop and len(s.triangles)]
         triangles = 0
         for key, ss in _looks(shown, b, spec).items():
