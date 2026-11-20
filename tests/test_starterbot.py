@@ -7,6 +7,7 @@ import pytest
 
 SCENE = Path(__file__).parent.parent / "models" / "starterbot" / "scene.xml"
 WHEELS = ("fl", "fr", "bl", "br")
+MOTORS = ("Front Left", "Front Right", "Back Left", "Back Right")
 IN = 0.0254
 
 needs_model = pytest.mark.skipif(not SCENE.exists(), reason="the model is built by `ninja model`")
@@ -24,8 +25,8 @@ def _wheel_of(m: mujoco.MjModel, body: int) -> str:
 
 def _drive(m: mujoco.MjModel, powers: tuple[float, ...], seconds: float) -> mujoco.MjData:
     d = mujoco.MjData(m)
-    for w, u in zip(WHEELS, powers, strict=True):
-        d.ctrl[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, f"starterbot_wheel_{w}")] = u
+    for motor, u in zip(MOTORS, powers, strict=True):
+        d.ctrl[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, motor)] = u
     for _ in range(int(seconds / m.opt.timestep)):
         mujoco.mj_step(m, d)
     return d
@@ -55,7 +56,7 @@ def test_starterbot_drives_as_a_mecanum_robot() -> None:
     """At full power it drives forward near its wheels' free speed, strafes left at most of
     that, as the robots' own tuning measured, and turns counterclockwise, each without drift."""
     m = _load()
-    a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, "starterbot_wheel_fl")
+    a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, "Front Left")
     rim = -m.actuator_gainprm[a, 0] / m.actuator_biasprm[a, 2] * 0.052
     fwd, left, turn = (_drive(m, p, 2.0) for p in ((1, 1, 1, 1), (-1, 1, 1, -1), (-1, 1, -1, 1)))
     v = {k: d.xmat[1].reshape(3, 3).T @ d.qvel[:3] for k, d in (("f", fwd), ("l", left))}
@@ -74,7 +75,7 @@ def test_starterbot_mechanisms_turn() -> None:
     m = _load()
     for a in range(m.nu):
         name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
-        if "wheel_" in name:
+        if name in MOTORS:
             continue
         d = mujoco.MjData(m)
         d.ctrl[a] = 1.0
@@ -83,3 +84,19 @@ def test_starterbot_mechanisms_turn() -> None:
         free = -m.actuator_gainprm[a, 0] / m.actuator_biasprm[a, 2]
         speed = d.qvel[m.jnt_dofadr[m.actuator_trnid[a, 0]]]
         assert 0.6 * free < speed <= free * (1 + 1e-6), (name, speed * 60 / 2 / math.pi)
+
+
+@pytest.mark.slow
+@needs_model
+def test_starterbot_intake_pulls_in() -> None:
+    """At the code's in, +1, the side of the intake roller and of each Gecko wheel that meets a
+    ball, the roller's underside and each wheel's inner side, moves back, into the robot."""
+    m = _load()
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+    for motor in ("intake", "left_intake_servo", "right_intake_servo"):
+        j = m.actuator_trnid[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, motor), 0]
+        b = m.jnt_bodyid[j]
+        omega = d.xmat[b].reshape(3, 3) @ m.jnt_axis[j]
+        meets = [0.0, -np.sign(d.xpos[b][1]), 0.0] if "servo" in motor else [0.0, 0.0, -1.0]
+        assert np.cross(omega, meets)[0] < 0, motor

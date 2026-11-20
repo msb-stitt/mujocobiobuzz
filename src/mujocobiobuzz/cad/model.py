@@ -359,12 +359,13 @@ def _joint(name: str, b: Body) -> str:
 
 
 def _motor(joint: str, mo: dict[str, Any]) -> str:
-    """A DC motor or a continuous servo on the joint, its control the power, −1 to 1: its torque
-    is the stall torque at full power, falling to none at its free speed."""
+    """A DC motor or a continuous servo on the joint, named as the robot's code names it, its
+    control the power, −1 to 1, as the code sets it: its torque is the stall torque at full
+    power, falling to none at its free speed."""
     stall = mo["stall_kg_cm"] * 9.80665 / 100
     free = mo["free_rpm"] * 2 * math.pi / 60
     return (
-        f'    <general name="{joint}" joint="{joint}" ctrlrange="-1 1" ctrllimited="true" '
+        f'    <general name="{mo["hardware"]}" joint="{joint}" ctrlrange="-1 1" ctrllimited="true" '
         f'gainprm="{stall:.6g}" biastype="affine" biasprm="0 0 {-stall / free:.6g}"/>'
     )
 
