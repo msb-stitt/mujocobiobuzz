@@ -7,6 +7,7 @@ license = "Apache-2.0"
 requires-python = ">=3.13"
 dependencies = [
     "mujoco>=4.0.1",
+    "numpy>=2.5.5",
 ]
 
 [build-system]
@@ -17,6 +18,10 @@ build-backend = "hatchling.build"
 packages = ["src/mujocobiobuzz"]
 
 [dependency-groups]
+cad = [
+    "cadquery-ocp>=8.0.1.1.0",
+    "fast-simplification>=0.2.0",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -43,3 +48,8 @@ files = ["src", "tests"]
 disallow_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+# The cad group holds OpenCASCADE's bindings, for the CAD conversion only; CI leaves it out.
+[[tool.mypy.overrides]]
+module = ["OCP", "OCP.*", "fast_simplification", "mujoco"]
+ignore_missing_imports = true

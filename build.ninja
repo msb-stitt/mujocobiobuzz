@@ -2,7 +2,10 @@
 #
 # `ninja check` = ruff check + ruff format --check + mypy + the fast pytest suite, through
 # `uv run` so the tools are the locked ones. The slow tests run with `uv run pytest -m slow`.
-# No target writes a file, so ninja runs each one every time.
+# The gate's targets write no file, so ninja runs each one every time.
+#
+# `ninja model` fetches goBILDA's StarterBot STEP into media/cad/, checks its hash, and converts
+# it to models/starterbot/, which the slow tests load. Neither is in git.
 
 rule lint
   command = uv run ruff check .
@@ -24,10 +27,31 @@ rule check
   command = uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q -m "not slow"
   description = ruff, ruff format, mypy, pytest
 
+rule fetch
+  command = curl -fsSL $url -o $zip.part && echo "$sha256  $zip.part" | shasum -a 256 -c - && mv $zip.part $zip && unzip -o -q $zip -d media/cad && touch $out
+  description = fetch $url
+
+rule convert
+  command = mkdir -p $dir && uv run --group cad python -m mujocobiobuzz.cad $spec $step $dir > $out
+  description = convert $step to $dir
+
 build lint: lint
 build fmt: fmt
 build typecheck: typecheck
 build test: test
 build check: check
+
+build media/cad/3200-2627-0004.step: fetch
+  url = https://www.gobilda.com/content/step_files/3200-2627-0004.zip
+  zip = media/cad/3200-2627-0004.zip
+  sha256 = 43cdd0acebcce31afe8b0ed541df06c394ed1624ca8fbcc4cf42c52a774dc673
+
+build models/starterbot/summary.json: convert robots/starterbot.json media/cad/3200-2627-0004.step $
+    | src/mujocobiobuzz/cad/model.py src/mujocobiobuzz/cad/step.py src/mujocobiobuzz/cad/__main__.py
+  spec = robots/starterbot.json
+  step = media/cad/3200-2627-0004.step
+  dir = models/starterbot
+
+build model: phony models/starterbot/summary.json
 
 default check

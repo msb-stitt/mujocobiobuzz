@@ -9,8 +9,9 @@ __pycache__/
 .ninja_log
 .ninja_deps
 
-# CAD downloads, meshes made from them, and videos stay out of git.
+# CAD downloads, the models made from them, and videos stay out of git.
 /media/
+/models/
 
 # macOS
 .DS_Store
