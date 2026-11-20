@@ -1,0 +1,33 @@
+# build.ninja — the gate for mujocobiobuzz, as ftc-claude's python-development skill sets it.
+#
+# `ninja check` = ruff check + ruff format --check + mypy + the fast pytest suite, through
+# `uv run` so the tools are the locked ones. The slow tests run with `uv run pytest -m slow`.
+# No target writes a file, so ninja runs each one every time.
+
+rule lint
+  command = uv run ruff check .
+  description = ruff check
+
+rule fmt
+  command = uv run ruff format --check .
+  description = ruff format --check
+
+rule typecheck
+  command = uv run mypy
+  description = mypy
+
+rule test
+  command = uv run pytest -q -m "not slow"
+  description = pytest (fast)
+
+rule check
+  command = uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q -m "not slow"
+  description = ruff, ruff format, mypy, pytest
+
+build lint: lint
+build fmt: fmt
+build typecheck: typecheck
+build test: test
+build check: check
+
+default check

@@ -1,0 +1,16 @@
+# The environment uv makes from uv.lock
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ninja build state
+.ninja_log
+.ninja_deps
+
+# CAD downloads, meshes made from them, and videos stay out of git.
+/media/
+
+# macOS
+.DS_Store

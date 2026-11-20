@@ -1,0 +1,27 @@
+# Run by prek before each commit. The full gate is `ninja check`; mypy and pytest stay there.
+# .docs/ is exempt from the document hooks.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^\.docs/
+      - id: end-of-file-fixer
+        exclude: ^\.docs/
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+
+  # ruff runs from uv.lock, so the hook and `ninja check` use the same version.
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
