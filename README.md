@@ -49,4 +49,11 @@ time on each frame. In AdvantageScope's Video tab, with the log open, load the v
 at 0 s, and it plays beside the log. It needs `ffmpeg` on the path; 9.0.2 from Homebrew made the
 first.
 
+## A spill's Monte Carlo
+
+`uv run python -m mujocobiobuzz.spill RUNS OUT.jsonl` loads blue's raised cell at random until
+the hive tips, RUNS times, and writes each run as a line of JSON: each ball's kind, when it left
+the cell, its place, velocity and spin then, when it landed, and its touches in the air.
+`mujocobiobuzz.spill` says how each is read.
+
 Licensed under Apache-2.0; see `LICENSE`.
