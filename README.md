@@ -26,7 +26,8 @@ out. Each folder's `scene.xml` lights the model, the robot on a floor. The conve
 CAD with `cadquery-ocp`, in the `cad` dependency group; the simulator needs only the models it
 writes. `robots/starterbot.json` and `fields/biobuzz.json` name which CAD parts make each moving
 body and how each collides. The field is in Pedro Pathing's field frame, in m, from a corner, and
-its hives turn on their pivots between two stable states. `uv run pytest -m slow` checks the
-built models.
+its hives turn on their pivots between two stable states. The robot's mecanum wheels roll on
+free rollers, and a motor drives each wheel and mechanism, its control the power, −1 to 1. `uv run
+pytest -m slow` checks the built models.
 
 Licensed under Apache-2.0; see `LICENSE`.

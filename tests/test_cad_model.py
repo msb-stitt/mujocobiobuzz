@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,9 @@ from numpy.typing import NDArray
 
 from mujocobiobuzz.cad.model import (
     CAD_TO_ROBOT,
+    Body,
     Frame,
+    _roller_geom,
     assign,
     patches,
     thicken,
@@ -173,3 +176,21 @@ def test_a_fixed_base_holds_still_and_its_hinge_stops(tmp_path: Path) -> None:
     pairs = {tuple(sorted(int(m.geom_bodyid[g]) for g in (c.geom1, c.geom2))) for c in d.contact}
     base, flap = (mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("gate", "gate_flap"))
     assert tuple(sorted((base, flap))) not in pairs
+
+
+def test_roller_ellipsoid_keeps_the_wheel_round() -> None:
+    """A roller 43.4 mm from the hub, 8.6 mm in radius and 23.45 mm in half-length, leaning 45°:
+    its ellipsoid is as wide as it, and at the roller's ends still reaches the wheel's radius."""
+    c, r0, half = 0.0434, 0.0086, 0.02345
+    axis = np.array([1.0, -1.0, 0.0]) / math.sqrt(2)
+    anchor = np.array([0.0, 0.0, -c])
+    s = np.linspace(-half, half, 9)
+    ring = np.array([[math.cos(t), math.sin(t)] for t in np.linspace(0, 2 * math.pi, 16)])
+    u, v = np.array([1.0, 1.0, 0.0]) / math.sqrt(2), np.array([0.0, 0.0, 1.0])
+    pts = np.array([anchor + a * axis + r0 * (x * u + y * v) for a in s for x, y in ring])
+    wheel = Body("wheel", axis=np.array([0.0, 1.0, 0.0]))
+    g = _roller_geom(pts, anchor, axis, wheel)
+    ra, _, a = g["size"]
+    assert ra == pytest.approx(r0)
+    end = ra * math.sqrt(1 - (half / a) ** 2)
+    assert math.hypot(c, half / math.sqrt(2)) + end == pytest.approx(c + r0)

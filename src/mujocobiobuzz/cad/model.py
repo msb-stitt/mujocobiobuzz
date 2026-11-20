@@ -68,6 +68,8 @@ class Body:
     joint: dict[str, Any] = field(default_factory=dict)
     geoms: list[dict[str, Any]] = field(default_factory=list)
     looks: list[str] = field(default_factory=list)
+    children: list[Body] = field(default_factory=list)
+    look_triangles: int | None = None
 
 
 def to_robot(p_mm: NDArray[np.float64], origin_mm: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -196,7 +198,9 @@ def build(solids: list[SolidLike], spec: dict[str, Any]) -> list[Body]:
         )
         body.axis = frame.axes @ np.array(b["joint"]["axis_cad"], float)
         g = b["collide"]
-        if g.get("hulls"):
+        if "rollers" in g:
+            body.solids, body.children = _rollers(body, g, spec, frame)
+        elif g.get("hulls"):
             body.geoms = hull_groups(body.solids, spec)
         else:
             body.geoms.append(
@@ -205,10 +209,63 @@ def build(solids: list[SolidLike], spec: dict[str, Any]) -> list[Body]:
                     pos=body.anchor,
                     axis=body.axis,
                     size=np.array([g["radius_mm"] * MM, g["half_mm"] * MM]),
+                    **({"condim": g["condim"]} if "condim" in g else {}),
                 )
             )
         bodies.append(body)
     return bodies
+
+
+def _rollers(
+    body: Body, g: dict[str, Any], spec: dict[str, Any], frame: Frame
+) -> tuple[list[SolidLike], list[Body]]:
+    """A mecanum wheel's rollers, the instances inside the assembly `g["rollers"]`, each a body
+    of its own on a free hinge along its length, its principal axis, through its centre; and the
+    wheel's other solids. A roller collides as an ellipsoid as wide as it, long enough that the
+    wheel's outline is a circle at its middle and at its ends, so the wheel rolls without a
+    bump; and with the floor and the balls, not with its neighbours."""
+    under = g["rollers"]
+    by: dict[str, list[SolidLike]] = {}
+    rest = []
+    for s in body.solids:
+        i = s.path.index(under) if under in s.path else -1
+        if 0 <= i < len(s.path) - 1:
+            by.setdefault(s.path[i + 1], []).append(s)
+        else:
+            rest.append(s)
+    children = []
+    for k, ss in sorted(by.items()):
+        name = f"{body.name}_" + "".join(c if c.isalnum() else "_" for c in k)
+        pts = frame.points(np.vstack([s.vertices for s in ss]))
+        vol = np.array([s.volume_mm3 for s in ss])
+        anchor = frame.points(
+            (vol[:, None] * np.array([s.centroid for s in ss])).sum(0) / vol.sum()
+        )
+        axis = np.linalg.svd(pts - pts.mean(0), full_matrices=False)[2][0]
+        child = Body(name, ss, anchor, axis, {"damping": g["roller_damping"]})
+        child.geoms = [_roller_geom(pts, anchor, axis, body)]
+        child.look_triangles = g["roller_look_triangles"]
+        children.append(child)
+    return rest, children
+
+
+def _roller_geom(
+    pts: NDArray[np.float64], anchor: NDArray[np.float64], axis: NDArray[np.float64], wheel: Body
+) -> dict[str, Any]:
+    assert wheel.axis is not None
+    rel = pts - anchor
+    along = rel @ axis
+    half = float(np.abs(along).max())
+    r0 = float(np.linalg.norm(rel - np.outer(along, axis), axis=1).max())
+    out = anchor - wheel.anchor
+    out -= (out @ wheel.axis) * wheel.axis
+    c = float(np.linalg.norm(out))
+    # The roller's axis leans across the wheel by `t`; its end sits sqrt(c² + (half t)²) from
+    # the hub, and the ellipsoid's radius there makes up the wheel's radius, c + r0.
+    t = abs(float(axis @ np.cross(wheel.axis, out / c)))
+    r_end = c + r0 - math.hypot(c, half * t)
+    a = half / math.sqrt(1 - (r_end / r0) ** 2)
+    return dict(type="ellipsoid", pos=anchor, axis=axis, size=np.array([r0, r0, a]))
 
 
 def write_stl(path: Path, verts: NDArray[np.float64], tris: NDArray[np.int64]) -> None:
@@ -270,7 +327,14 @@ def _geom(g: dict[str, Any], rel: NDArray[np.float64]) -> list[str]:
         a = np.asarray(g["axis"])
         h = g["size"][1]
         extra = f' fromto="{_v(pos - a * h)} {_v(pos + a * h)}"'
+        if "condim" in g:
+            extra += f' condim="{g["condim"]}"'
         return [f'<geom type="cylinder" size="{g["size"][0]:.6g}"{extra} class="collision"/>']
+    if g["type"] == "ellipsoid":
+        return [
+            f'<geom type="ellipsoid" pos="{_v(pos)}" zaxis="{_v(g["axis"])}" '
+            f'size="{_v(g["size"])}" contype="2" conaffinity="1" class="collision"/>'
+        ]
     if g["type"] == "plane":
         return [f'<geom type="plane" pos="{_v(pos)}" size="{_v(g["size"])}" class="collision"/>']
     return [f'<geom type="box" pos="{_v(pos)}" size="{_v(g["size"])}" class="collision"/>']
@@ -294,8 +358,44 @@ def _joint(name: str, b: Body) -> str:
     )
 
 
+def _motor(joint: str, mo: dict[str, Any]) -> str:
+    """A DC motor or a continuous servo on the joint, its control the power, −1 to 1: its torque
+    is the stall torque at full power, falling to none at its free speed."""
+    stall = mo["stall_kg_cm"] * 9.80665 / 100
+    free = mo["free_rpm"] * 2 * math.pi / 60
+    return (
+        f'    <general name="{joint}" joint="{joint}" ctrlrange="-1 1" ctrllimited="true" '
+        f'gainprm="{stall:.6g}" biastype="affine" biasprm="0 0 {-stall / free:.6g}"/>'
+    )
+
+
 def _meshes(b: Body) -> list[str]:
     return [m for g in b.geoms if g["type"] == "hull" for m in g["meshes"]]
+
+
+def _body(
+    name: str, b: Body, parent: NDArray[np.float64], indent: str, masses: dict[str, Any]
+) -> list[str]:
+    """A hinged body's MJCF, placed relative to its parent's anchor, with its own children."""
+    m, com, inertia = masses[b.name]
+    i = indent + "  "
+    out = [
+        f'{indent}<body name="{name}_{b.name}" pos="{_v(b.anchor - parent)}">',
+        i + _joint(f"{name}_{b.name}", b),
+        f'{i}<inertial pos="{_v(com - b.anchor)}" mass="{m:.6g}" fullinertia='
+        f'"{_v(inertia[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]])}"/>',
+    ]
+    out += [f'{i}<geom type="mesh" mesh="{lk}" class="visual"/>' for lk in b.looks]
+    out += _lines(i, b.geoms, b.anchor)
+    for c in b.children:
+        out += _body(name, c, b.anchor, i, masses)
+    out.append(f"{indent}</body>")
+    return out
+
+
+def _all(bodies: list[Body]) -> list[Body]:
+    """The bodies and, after each, its children's, depth first."""
+    return [x for b in bodies for x in [b, *_all(b.children)]]
 
 
 def mjcf(bodies: list[Body], spec: dict[str, Any], masses: dict[str, Any]) -> str:
@@ -304,6 +404,9 @@ def mjcf(bodies: list[Body], spec: dict[str, Any], masses: dict[str, Any]) -> st
     out = [
         f'<mujoco model="{name}">',
         '  <compiler angle="radian" meshdir="meshes"/>',
+        # A motor's back-EMF is a damping large for a light body's inertia; implicitfast takes it
+        # implicitly, where the default integrator goes unstable.
+        '  <option integrator="implicitfast"/>',
         "  <default>",
         '    <default class="visual">',
         '      <geom contype="0" conaffinity="0" group="1" rgba="0.75 0.75 0.78 1"/>',
@@ -314,8 +417,8 @@ def mjcf(bodies: list[Body], spec: dict[str, Any], masses: dict[str, Any]) -> st
         "  </default>",
         "  <asset>",
     ]
-    out += [f'    <mesh name="{m}" file="{m}.stl"/>' for b in bodies for m in b.looks]
-    out += [f'    <mesh name="{m}" file="{m}.stl"/>' for b in bodies for m in _meshes(b)]
+    out += [f'    <mesh name="{m}" file="{m}.stl"/>' for b in _all(bodies) for m in b.looks]
+    out += [f'    <mesh name="{m}" file="{m}.stl"/>' for b in _all(bodies) for m in _meshes(b)]
     out += [
         "  </asset>",
         "  <worldbody>",
@@ -331,17 +434,13 @@ def mjcf(bodies: list[Body], spec: dict[str, Any], masses: dict[str, Any]) -> st
     out += [f'      <geom type="mesh" mesh="{m}" class="visual"/>' for m in bodies[0].looks]
     out += _lines("      ", bodies[0].geoms, np.zeros(3))
     for b in bodies[1:]:
-        m, com, inertia = masses[b.name]
-        out += [
-            f'      <body name="{name}_{b.name}" pos="{_v(b.anchor)}">',
-            "        " + _joint(f"{name}_{b.name}", b),
-            f'        <inertial pos="{_v(com - b.anchor)}" mass="{m:.6g}" fullinertia='
-            f'"{_v(inertia[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]])}"/>',
-        ]
-        out += [f'        <geom type="mesh" mesh="{m}" class="visual"/>' for m in b.looks]
-        out += _lines("        ", b.geoms, b.anchor)
-        out.append("      </body>")
+        out += _body(name, b, np.zeros(3), "      ", masses)
     out += ["    </body>", "  </worldbody>"]
+    motors = [(b, j["motor"]) for b in bodies[1:] if "motor" in (j := b.joint)]
+    if motors:
+        out.append("  <actuator>")
+        out += [_motor(f"{name}_{b.name}", mo) for b, mo in motors]
+        out.append("  </actuator>")
     if spec.get("base", "free") != "free":
         # MuJoCo leaves out a body's contacts with its parent, but not where the parent is welded
         # to the world, as a fixed base is; a hinged body's bearings sit inside the base's hulls.
@@ -414,7 +513,7 @@ def write_model(
     look_drop = set(spec.get("no_look", []))
     masses: dict[str, Any] = {}
     summary: dict[str, Any] = {"name": spec["name"], "bodies": {}}
-    for b in bodies:
+    for b in _all(bodies):
         _write_hulls(b, spec, frame, out, reduce)
         own: dict[str, Any] = next((x for x in spec["bodies"] if x["name"] == b.name), {})
         density = own.get("density_g_cm3", spec["density_g_cm3"])
@@ -423,7 +522,9 @@ def write_model(
         triangles = 0
         for key, ss in _looks(shown, b, spec).items():
             v, t = _mesh_of(ss, frame, b.anchor)
-            budget = spec["look_triangles"].get(key, spec["look_triangles"]["default"])
+            budget = b.look_triangles or spec["look_triangles"].get(
+                key, spec["look_triangles"]["default"]
+            )
             if reduce is not None and len(t) > budget:
                 v, t = reduce(v, t, budget)
             m = f"{spec['name']}_{key}"
