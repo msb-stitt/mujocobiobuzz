@@ -1,0 +1,120 @@
+{
+ "name": "biobuzz",
+ "source": "https://ftc-resources.firstinspires.org/ftc/archive/2027/field/field-cad-step",
+ "base": "fixed",
+ "axes": [
+  [
+   1,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   -1
+  ],
+  [
+   0,
+   1,
+   0
+  ]
+ ],
+ "origin_cad_mm": [
+  -1828.8,
+  0,
+  1828.8
+ ],
+ "density_g_cm3": 2.7,
+ "leave_out": [
+  "am-5851: Pollen",
+  "am-5852: Blue Nectar",
+  "am-5852: Red Nectar"
+ ],
+ "no_collision": [
+  "am-2499: FIRST Tech Challenge Field Soft Tiles <1>",
+  "Gaffer Tape, Blue, 1in Wide, 11in Long",
+  "Gaffer Tape, Blue, 1in Wide, 20.69in Long",
+  "Gaffer Tape, Blue, 1in Wide, 22.69in Long",
+  "Gaffer Tape, Blue, 1in Wide, 54in Long",
+  "Gaffer Tape, Blue, 1in Wide, 94.82in Long",
+  "Gaffer Tape, Red, 1in Wide, 11in Long",
+  "Gaffer Tape, Red, 1in Wide, 20.69in Long",
+  "Gaffer Tape, Red, 1in Wide, 22.69in Long",
+  "Gaffer Tape, Red, 1in Wide, 54in Long",
+  "Gaffer Tape, Red, 1in Wide, 94.82in Long"
+ ],
+ "floor": {
+  "centre_m": [
+   1.8288,
+   1.8288,
+   0
+  ],
+  "half_m": [
+   1.8288,
+   1.8288
+  ]
+ },
+ "hull_by": "solid",
+ "min_box_mm3": 2000,
+ "split_ratio": 4,
+ "max_pieces": 16,
+ "hull_triangles": 200,
+ "look_by": "part",
+ "look_triangles": {
+  "default": 60000
+ },
+ "bodies": [
+  {
+   "name": "blue_hive",
+   "parts": [
+    "am-5853-Blue Hive <1>"
+   ],
+   "joint": {
+    "through": "Goal Pivot Assembly <1>",
+    "axis_cad": [
+     1,
+     0,
+     0
+    ],
+    "range_deg": [
+     -60,
+     0
+    ],
+    "damping": 0.01,
+    "stop_solref": [
+     0.05,
+     1.2
+    ]
+   },
+   "collide": {
+    "hulls": true
+   }
+  },
+  {
+   "name": "red_hive",
+   "parts": [
+    "am-5853-Red Hive <1>"
+   ],
+   "joint": {
+    "through": "Goal Pivot Assembly <1>",
+    "axis_cad": [
+     1,
+     0,
+     0
+    ],
+    "range_deg": [
+     0,
+     60
+    ],
+    "damping": 0.01,
+    "stop_solref": [
+     0.05,
+     1.2
+    ]
+   },
+   "collide": {
+    "hulls": true
+   }
+  }
+ ]
+}

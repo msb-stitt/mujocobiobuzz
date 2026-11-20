@@ -4,8 +4,9 @@
 # `uv run` so the tools are the locked ones. The slow tests run with `uv run pytest -m slow`.
 # The gate's targets write no file, so ninja runs each one every time.
 #
-# `ninja model` fetches goBILDA's StarterBot STEP into media/cad/, checks its hash, and converts
-# it to models/starterbot/, which the slow tests load. Neither is in git.
+# `ninja model` fetches goBILDA's StarterBot STEP and FIRST's field STEP into media/cad/, checks
+# their hashes, and converts them to models/starterbot/ and models/biobuzz/, which the slow tests
+# load. Neither is in git.
 
 rule lint
   command = uv run ruff check .
@@ -52,6 +53,17 @@ build models/starterbot/summary.json: convert robots/starterbot.json media/cad/3
   step = media/cad/3200-2627-0004.step
   dir = models/starterbot
 
-build model: phony models/starterbot/summary.json
+build media/cad/field-cad-step.step: fetch
+  url = https://ftc-resources.firstinspires.org/ftc/archive/2027/field/field-cad-step
+  zip = media/cad/field-cad-step.zip
+  sha256 = 5e768b731f1ec8dcd14debba53225c43718877923c351ce08504305f68f7fe00
+
+build models/biobuzz/summary.json: convert fields/biobuzz.json media/cad/field-cad-step.step $
+    | src/mujocobiobuzz/cad/model.py src/mujocobiobuzz/cad/step.py src/mujocobiobuzz/cad/__main__.py
+  spec = fields/biobuzz.json
+  step = media/cad/field-cad-step.step
+  dir = models/biobuzz
+
+build model: phony models/starterbot/summary.json models/biobuzz/summary.json
 
 default check

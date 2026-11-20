@@ -7,7 +7,16 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from mujocobiobuzz.cad.model import CAD_TO_ROBOT, assign, to_robot, weld, write_model
+from mujocobiobuzz.cad.model import (
+    CAD_TO_ROBOT,
+    Frame,
+    assign,
+    patches,
+    thicken,
+    to_robot,
+    weld,
+    write_model,
+)
 
 
 @dataclass
@@ -100,3 +109,67 @@ def test_model_loads_and_rests_on_its_wheel_and_frame(tmp_path: Path) -> None:
     assert np.allclose(m.body_pos[wheel], [0, 0.12, 0.05])
     hinge = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "toy_wheel")
     assert np.allclose(m.jnt_axis[hinge], [0, 1, 0])
+
+
+def test_a_field_frame_puts_cad_y_up() -> None:
+    # The field's CAD has y up and its origin at the field's centre; the model's origin is a corner.
+    f = Frame(np.array([-1828.8, 0, 1828.8]), np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]))
+    assert np.allclose(f.points(np.array([[0, 1000, 0]])), [[1.8288, 1.8288, 1.0]])
+
+
+def test_patches_cut_a_bent_sheet_at_its_bend() -> None:
+    # Two flat squares meeting at a right angle, two triangles each.
+    v = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [1, 0, 1], [1, 1, 1]], float)
+    t = np.array([[0, 1, 2], [0, 2, 3], [1, 4, 5], [1, 5, 2]])
+    got = sorted(sorted(p.tolist()) for p in patches(v, t, 2))
+    assert got == [[0, 1], [2, 3]]
+
+
+def test_thicken_gives_a_flat_patch_depth_and_leaves_a_solid_one() -> None:
+    v = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+    tv, tt = thicken(v, np.array([[0, 1, 2]]), 0.001)
+    assert len(tv) == 6 and len(tt) == 2
+    assert np.ptp(tv[:, 2]) == pytest.approx(0.001)
+    cube = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], float)
+    tri = np.array([[0, 1, 2], [4, 5, 6], [0, 4, 1], [3, 7, 2]])
+    cv, ct = thicken(cube, tri, 0.001)
+    assert len(cv) == 8 and len(ct) == 4
+
+
+FIXED: dict[str, Any] = {
+    **SPEC,
+    "name": "gate",
+    "base": "fixed",
+    "hull_by": "solid",
+    "bodies": [
+        {
+            "name": "flap",
+            "parts": ["wheel:1"],
+            "joint": {
+                "through": "body",
+                "axis_cad": [1, 0, 0],
+                "range_deg": [-60, 0],
+                "stop_solref": [0.05, 1.2],
+            },
+            "collide": {"hulls": True},
+        }
+    ],
+}
+
+
+def test_a_fixed_base_holds_still_and_its_hinge_stops(tmp_path: Path) -> None:
+    # The flap's bearing reaches 20 mm into the frame, as a hive's does into its A-frame.
+    overlapping = [
+        box("frame:1", [-100, -100, 0], [100, 100, 20]),
+        box("wheel:1", [80, -50, 10], [100, 50, 110]),
+    ]
+    write_model(overlapping, FIXED, tmp_path)  # type: ignore[arg-type]
+    m = mujoco.MjModel.from_xml_path(str(tmp_path / "scene.xml"))
+    hinge = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "gate_flap")
+    assert m.njnt == 1 and m.jnt_limited[hinge]
+    assert np.allclose(np.degrees(m.jnt_range[hinge]), [-60, 0])
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+    pairs = {tuple(sorted(int(m.geom_bodyid[g]) for g in (c.geom1, c.geom2))) for c in d.contact}
+    base, flap = (mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("gate", "gate_flap"))
+    assert tuple(sorted((base, flap))) not in pairs
