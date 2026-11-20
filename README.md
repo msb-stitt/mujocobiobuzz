@@ -36,4 +36,9 @@ control the power, −1 to 1, as that code sets it. `uv run pytest -m slow` chec
 biobuzz's `simRun`, as AdvantageScope is one, setting each motor to the power biobuzz's code set.
 `mujocobiobuzz.nt` names the topics it reads.
 
+## Replaying a robot's log
+
+`mujocobiobuzz.replay` drives the model from a robot's flight log, a WPILOG file
+`corbelsflightlog` wrote, by the same powers, and reads the robot's own velocity beside them.
+
 Licensed under Apache-2.0; see `LICENSE`.

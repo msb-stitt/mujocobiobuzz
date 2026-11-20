@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 # Each power topic, and the model's motors it sets. `SimPublisher` writes the wheels' powers as
 # the code set them, before a motor's direction, so +1 drives each wheel forward; `Intake` sets
 # its motor and both Gecko wheels to one speed, +1 in.
+WHEELS = ("frontLeft", "frontRight", "backLeft", "backRight")
 POWERS: dict[str, tuple[str, ...]] = {
     "sim/wheels/frontLeft": ("Front Left",),
     "sim/wheels/frontRight": ("Front Right",),
