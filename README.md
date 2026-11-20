@@ -41,4 +41,12 @@ biobuzz's `simRun`, as AdvantageScope is one, setting each motor to the power bi
 `mujocobiobuzz.replay` drives the model from a robot's flight log, a WPILOG file
 `corbelsflightlog` wrote, by the same powers, and reads the robot's own velocity beside them.
 
+## A replay's video
+
+`uv run python -m mujocobiobuzz.video LOG OUT.mp4` replays a log on the field, from its
+localizer's first pose, and draws it to a video whose first frame is the log's first record, its
+time on each frame. In AdvantageScope's Video tab, with the log open, load the video, lock it
+at 0 s, and it plays beside the log. It needs `ffmpeg` on the path; 9.0.2 from Homebrew made the
+first.
+
 Licensed under Apache-2.0; see `LICENSE`.

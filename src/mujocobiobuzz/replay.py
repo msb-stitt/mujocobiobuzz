@@ -7,6 +7,8 @@ them, so a replay can be put beside what the robot did.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,15 +27,19 @@ POWERS = {f"/wheel/{w}/speed": f"sim/wheels/{w}" for w in nt.WHEELS} | {
 }
 # The robot's velocity along itself and its turn, as its localizer logged them.
 VELOCITY = ("/Robot/vel/forward_ips", "/Robot/vel/strafe_ips", "/Robot/vel/omega_radps")
+# Where its localizer put it, in Pedro Pathing's inches from a field corner and degrees.
+POSE = ("/Localizer/pinPoint/x_in", "/Localizer/pinPoint/y_in", "/Localizer/pinPoint/heading_deg")
 
 
 @dataclass
 class Log:
     """A log's powers, as (time, `SimRun` topic, value) in time order, its time from the log's
-    first record, s; its velocity topics' records, as rows of time and value; and the time of its
-    last record."""
+    first record, s; its velocity topics' records, as rows of time and value; the time of its
+    last record; and its localizer's first pose, in the field model's frame, (x m, y m, heading
+    rad), if it logged one."""
 
     end_s: float = 0.0
+    start: tuple[float, float, float] | None = None
     powers: list[tuple[float, str, float | bool]] = field(default_factory=list)
     velocity: dict[str, NDArray[np.float64]] = field(default_factory=dict)
 
@@ -45,6 +51,7 @@ def read(path: Path) -> Log:
     vel: dict[str, list[tuple[float, float]]] = {k: [] for k in VELOCITY}
     t0: float | None = None
     end = 0.0
+    first: dict[str, float] = {}
     for rec in DataLogReader(str(path)):
         if rec.isStart():
             s = rec.getStartData()
@@ -60,16 +67,30 @@ def read(path: Path) -> Log:
             rows.append((t - t0, POWERS[name], v))
         elif name in vel:
             vel[name].append((t - t0, rec.getDouble()))
+        elif name in POSE and name not in first:
+            first[name] = rec.getDouble()
         end = t - t0
     rows.sort(key=lambda r: r[0])
-    return Log(end, rows, {k: np.array(v, float).reshape(-1, 2) for k, v in vel.items()})
+    start = None
+    if len(first) == len(POSE):
+        x, y, h = (first[k] for k in POSE)
+        start = (x * IN, y * IN, math.radians(h))
+    return Log(end, start, rows, {k: np.array(v, float).reshape(-1, 2) for k, v in vel.items()})
 
 
-def replay(scene: Path, log: Log, every: int = 20) -> NDArray[np.float64]:
-    """The scene's robot driven by the log's powers to the log's end; rows of time, s, its velocity
-    along itself and to its left, in/s, and its turn, rad/s, each `every` steps."""
-    m = mujoco.MjModel.from_xml_path(str(scene))
+def replay(
+    m: mujoco.MjModel,
+    log: Log,
+    prefix: str = "",
+    every: int = 20,
+    sample: Callable[[mujoco.MjData], None] | None = None,
+) -> NDArray[np.float64]:
+    """The model's robot under `prefix` driven by the log's powers to the log's end; rows of
+    time, s, its velocity along itself and to its left, in/s, and its turn, rad/s, each `every`
+    steps, when `sample` is also handed the state."""
     d = mujoco.MjData(m)
+    root = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, prefix + "starterbot")
+    dof = m.jnt_dofadr[m.body_jntadr[root]]
     held: dict[str, float | bool] = {}
     out = []
     i = step = 0
@@ -78,10 +99,13 @@ def replay(scene: Path, log: Log, every: int = 20) -> NDArray[np.float64]:
             _, topic, v = log.powers[i]
             held[topic] = v
             i += 1
-        nt.apply(m, d, nt.controls(held))
+        nt.apply(m, d, nt.controls(held), prefix)
         mujoco.mj_step(m, d)
         step += 1
         if step % every == 0:
-            v_body = d.xmat[1].reshape(3, 3).T @ d.qvel[:3] / IN
-            out.append((d.time, v_body[0], v_body[1], d.qvel[5]))
+            # A free joint's velocity: its origin's, in the world, then its turn, in the body.
+            v_body = d.xmat[root].reshape(3, 3).T @ d.qvel[dof : dof + 3] / IN
+            out.append((d.time, v_body[0], v_body[1], d.qvel[dof + 5]))
+            if sample is not None:
+                sample(d)
     return np.array(out, float).reshape(-1, 4)

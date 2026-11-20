@@ -641,6 +641,7 @@ source = { editable = "." }
 dependencies = [
     { name = "mujoco" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "pyntcore" },
 ]
 
@@ -660,6 +661,7 @@ dev = [
 requires-dist = [
     { name = "mujoco", specifier = ">=4.0.1" },
     { name = "numpy", specifier = ">=2.5.5" },
+    { name = "pillow", specifier = ">=13.0.0" },
     { name = "pyntcore", specifier = ">=2026.2.2" },
 ]
 

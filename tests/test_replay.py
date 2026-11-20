@@ -1,6 +1,7 @@
 import struct
 from pathlib import Path
 
+import mujoco
 import numpy as np
 import pytest
 
@@ -60,7 +61,7 @@ def test_replay_drives_the_model_as_the_log_did(tmp_path: Path) -> None:
         rows += [(topic, "double", 0, 1.0), (topic, "double", 10**6, 0.0)]
     rows.append(("/loop/count", "double", 2 * 10**6, 2.0))
     write_log(log, sorted(rows, key=lambda r: r[2]))
-    trace = replay(SCENE, read(log))
+    trace = replay(mujoco.MjModel.from_xml_path(str(SCENE)), read(log))
     forward, left = (lambda t, c=c: np.interp(t, trace[:, 0], trace[:, c]) for c in (1, 2))
     assert forward(0.9) > 55
     assert abs(left(0.9)) < 2

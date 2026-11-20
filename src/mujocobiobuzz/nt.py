@@ -54,10 +54,12 @@ def controls(values: Mapping[str, float | bool]) -> dict[str, float]:
     return {k: max(-1.0, min(1.0, v)) for k, v in out.items()}
 
 
-def apply(m: mujoco.MjModel, d: mujoco.MjData, powers: Mapping[str, float]) -> None:
-    """Sets each named motor's control."""
+def apply(
+    m: mujoco.MjModel, d: mujoco.MjData, powers: Mapping[str, float], prefix: str = ""
+) -> None:
+    """Sets each named motor's control, of the robot under `prefix`."""
     for name, u in powers.items():
-        d.ctrl[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, name)] = u
+        d.ctrl[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, prefix + name)] = u
 
 
 class Client:
